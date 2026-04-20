@@ -6,7 +6,7 @@ When some dissipative flows are not included in the biosphere3 brightway databas
 
 # Methods
 
-![metalinvent general method](doc/impact_pathway.png)
+![metalinvent general method](doc/figures/metalinvent_method.png)
 
 ### Requirements
 ecoinvent license to download ecoinvent 3.12 cutoff database.
