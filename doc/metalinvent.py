@@ -55,7 +55,7 @@ class Metalinvent:
 
         self.find_missing_flows()
         self.create_new_biosphere()
-        self.write_new_biosphere()
+        self.write_new_biosphere(self.biosphere_resources_dict)
         self.df_new_biosphere()
         self.copy_ei_db()
         self.complete_LCIA_methods()
