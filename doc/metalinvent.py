@@ -153,7 +153,7 @@ class Metalinvent:
                 self.df_new_bio_flows.loc[i, "ACP CF value"] = \
                 self.df_cf_iwp[self.df_cf_iwp.loc[:, "substances"] == "Aluminum, dissipative flow, to the environment"].loc[:,
                 "ACP STEPS with C"].iloc[0]
-            elif "Average plastic" in bio_diss_flows.loc[i, "Elem flow name"]:
+            elif "Average plastic" in self.df_new_bio_flows.loc[i, "Elem flow name"]:
                 self.df_new_bio_flows.loc[i, "ACP CF value"] = 3.15
             else:
                 self.df_new_bio_flows.loc[i, "ACP CF value"] = \
@@ -221,7 +221,7 @@ class Metalinvent:
                 compartment = "unspecified"
                 elem_flow_name = self.df_change.loc[i, "Substance long name"] + ", dissipative flow, to the environment"
                 for code in process_codes_list:
-                    if elem_flow_name in list(bio_diss_flows.loc[:, "Elem flow name"]):
+                    if elem_flow_name in list(self.df_new_bio_flows.loc[:, "Elem flow name"]):
                         biosphere_db = self.new_bio_name
                         code_flow = \
                         self.df_new_bio_flows[self.df_new_bio_flows.loc[:, "Elem flow name"] == elem_flow_name].loc[:, "code"].iloc[0]
