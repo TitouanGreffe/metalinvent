@@ -222,7 +222,7 @@ class Metalinvent:
                 elem_flow_name = self.df_change.loc[i, "Substance long name"] + ", dissipative flow, to the environment"
                 for code in process_codes_list:
                     if elem_flow_name in list(bio_diss_flows.loc[:, "Elem flow name"]):
-                        biosphere_db = biosphere_resource_name
+                        biosphere_db = self.new_bio_name
                         code_flow = \
                         self.df_new_bio_flows[self.df_new_bio_flows.loc[:, "Elem flow name"] == elem_flow_name].loc[:, "code"].iloc[0]
                         print("code_flow = ", code_flow)
