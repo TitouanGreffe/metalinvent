@@ -15,8 +15,13 @@ class Metalinvent:
         self.biosphere_resources_dict = {}
         self.df_change = df_change
         self.df_cf_iwp = df_cf_iwp
+        self.column_name = {"Adaptation to resources services loss (beta)":"ACP CF value",
+                            "Resources services deficit (beta)":"RESEDA CF value"}
+        self.impact_cat = ["Adaptation to resources services loss (beta)","Resources services deficit (beta)"]
+        self.comment_extraction = "; Metalinvent adaptations: Missing extraction flows added as per metalinvent tool."
+        self.comment_dissipation = " Missing dissipative flows added as per metalinvent tool."
         self.df_missing_flows = pd.DataFrame(
-            columns=["Elem flow name", "Compartment_iw", "Sub-compartment_iw", "ACP CF value"])
+            columns=["Elem flow name", "Compartment_iw", "Sub-compartment_iw", "code"])
 
         # set up logging tool
         self.logger = logging.getLogger('Metalinvent')
@@ -79,9 +84,8 @@ class Metalinvent:
         self.complete_LCIA_methods()
 
     def complete_LCIA_methods(self):
-        impact_cat = ["Adaptation to resources services loss (beta)"]
         iw_methods = [method for method in bw.methods if "impact world+" in " ".join(method).lower()]
-        for method in impact_cat:
+        for method in self.impact_cat:
             method_bw = [m for m in iw_methods if "IMPACT World+ Midpoint 2.2.1 for ecoinvent v3.12" in m[0] if
                          method in m[2]]
             if len(method_bw)==0:
@@ -99,18 +103,19 @@ class Metalinvent:
                                                                      self.df_new_bio_flows.loc[i, "Elem flow name"]) & (
                                                                                 self.df_new_bio_flows.loc[:, "Compartment"] ==
                                                                                 self.df_new_bio_flows.loc[i, "Compartment"])].loc[
-                                                     :, "code"].iloc[0]), self.df_new_bio_flows.loc[i, 'ACP CF value']))
+                                                     :, "code"].iloc[0]), self.df_new_bio_flows.loc[i, self.column_name[method]]))
                     try:
-                        dict_method.append(((self.new_bio_name, self.df_new_bio_flows[(self.df_new_bio_flows.loc[:,
-                                                                                      "Elem flow name"] ==
-                                                                                      self.df_new_bio_flows.loc[
-                                                                                          i, "Elem flow name"]) & (
-                                                                                                 self.df_new_bio_flows.loc[:,
-                                                                                                 "Compartment"] ==
-                                                                                                 self.df_new_bio_flows.loc[
-                                                                                                     i, "Compartment"])].loc[
-                                                                      :, "code"].iloc[0]),
-                                            self.df_new_bio_flows.loc[i, 'ACP CF value']))
+                        if self.df_new_bio_flows.loc[i, self.column_name[method]] !=0:
+                            dict_method.append(((self.new_bio_name, self.df_new_bio_flows[(self.df_new_bio_flows.loc[:,
+                                                                                          "Elem flow name"] ==
+                                                                                          self.df_new_bio_flows.loc[
+                                                                                              i, "Elem flow name"]) & (
+                                                                                                     self.df_new_bio_flows.loc[:,
+                                                                                                     "Compartment"] ==
+                                                                                                     self.df_new_bio_flows.loc[
+                                                                                                         i, "Compartment"])].loc[
+                                                                          :, "code"].iloc[0]),
+                                                self.df_new_bio_flows.loc[i, self.column_name[method]]))
                     except IndexError:
                         pass
                 new_method.write(dict_method)
@@ -123,10 +128,10 @@ class Metalinvent:
                 row_missing_flow = {"Elem flow name": self.df_change.loc[
                                                           i, "Substance long name"] + ", dissipative flow, to the environment",
                                     "Compartment_iw": "unspecified",
-                                    "Sub-compartment_iw": "unspecified", "ACP CF value": self.df_change.loc[i, "ACP CF"]}
+                                    "Sub-compartment_iw": "unspecified","code":uuid.uuid4().hex}
                 self.df_missing_flows = pd.concat(
                     [self.df_missing_flows, pd.DataFrame(row_missing_flow, index=[count_miss_flow])])
-        self.df_missing_flows = self.df_missing_flows.drop_duplicates()
+        self.df_missing_flows = self.df_missing_flows.drop_duplicates(subset=["Elem flow name","Compartment_iw","Sub-compartment_iw"])
         self.df_missing_flows = self.df_missing_flows.reset_index().drop(columns=["index"])
 
 
@@ -145,13 +150,12 @@ class Metalinvent:
 
     def create_new_biosphere(self):
         for i in self.df_missing_flows.index:
-            code = uuid.uuid4().hex
-            self.biosphere_resources_dict[(self.new_bio_name, code)] = {
+            self.biosphere_resources_dict[(self.new_bio_name, self.df_missing_flows.loc[i, "code"])] = {
                 "name": self.df_missing_flows.loc[i, "Elem flow name"],
                 "unit": "kilogram",
                 "type": "biosphere",
                 "categories": (self.df_missing_flows.loc[i, "Compartment_iw"],),
-                "code": code
+                "code": self.df_missing_flows.loc[i, "code"]
             }
     def write_new_biosphere(self,new_bio_dict):
         if self.new_bio_name in list(bw.databases):
@@ -171,18 +175,31 @@ class Metalinvent:
                 columns=['Elem flow name', 'Compartment', 'Sub-compartment', 'code', 'unit'])
         )
         for i in self.df_new_bio_flows.index:
-            if "Aluminium" in self.df_new_bio_flows.loc[i, "Elem flow name"]:
-                self.df_new_bio_flows.loc[i, "ACP CF value"] = \
-                self.df_cf_iwp[self.df_cf_iwp.loc[:, "substances"] == "Aluminum, dissipative flow, to the environment"].loc[:,
-                "ACP STEPS with C"].iloc[0]
-            elif "Average plastic" in self.df_new_bio_flows.loc[i, "Elem flow name"]:
-                self.df_new_bio_flows.loc[i, "ACP CF value"] = 3.15
-            else:
-                self.df_new_bio_flows.loc[i, "ACP CF value"] = \
-                self.df_cf_iwp[self.df_cf_iwp.loc[:, "substances"] == self.df_new_bio_flows.loc[i, "Elem flow name"]].loc[:,
-                "ACP STEPS with C"].iloc[0]
-        self.df_new_bio_flows.drop_duplicates()
-        self.df_new_bio_flows.reset_index().drop(columns=["index"])
+            for method in self.impact_cat:
+                if "Aluminium" in self.df_new_bio_flows.loc[i, "Elem flow name"]:
+                    if len(self.df_cf_iwp[(self.df_cf_iwp.loc[:, "Impact category"] == method) & (
+                            self.df_cf_iwp.loc[:, "Elem flow name"] == "Aluminum, dissipative flow, to the environment")].loc[:,"CF value"]) > 0:
+                        self.df_new_bio_flows.loc[i, self.column_name[method]] = \
+                        self.df_cf_iwp[(self.df_cf_iwp.loc[:, "Impact category"]==method)&(self.df_cf_iwp.loc[:, "Elem flow name"] == "Aluminum, dissipative flow, to the environment")].loc[:,
+                        "CF value"].iloc[0]
+                    else:
+                        self.df_new_bio_flows.loc[i, self.column_name[method]] = 0
+                elif "Average plastic" in self.df_new_bio_flows.loc[i, "Elem flow name"]:
+                    if method == self.impact_cat[0]:
+                        self.df_new_bio_flows.loc[i, self.column_name[method]] = 3.15
+                    else:
+                        self.df_new_bio_flows.loc[i, self.column_name[method]] = 0
+                else:
+                    if len(self.df_cf_iwp[(self.df_cf_iwp.loc[:, "Impact category"]==method)&(self.df_cf_iwp.loc[:, "Elem flow name"] == self.df_new_bio_flows.loc[i, "Elem flow name"])].loc[:,
+                    "CF value"])>0:
+                        self.df_new_bio_flows.loc[i, self.column_name[method]] = \
+                        self.df_cf_iwp[(self.df_cf_iwp.loc[:, "Impact category"]==method)&(self.df_cf_iwp.loc[:, "Elem flow name"] == self.df_new_bio_flows.loc[i, "Elem flow name"])].loc[:,
+                        "CF value"].iloc[0]
+                    else:
+                        self.df_new_bio_flows.loc[i, self.column_name[method]] = 0
+
+        self.df_new_bio_flows = self.df_new_bio_flows.drop_duplicates()
+        self.df_new_bio_flows = self.df_new_bio_flows.reset_index().drop(columns=["index"])
 
     def copy_ei_db(self):
         """
@@ -191,6 +208,8 @@ class Metalinvent:
         Returns:
 
         """
+        if self.metalinvent_db_name in list(bw.databases):
+            del bw.databases[self.metalinvent_db_name]
 
         ## STEP 1: Loading ei_db and adjusting db key in new dictionary ei_adj_dict
         ei_dict = self.ei_db.load()
@@ -206,7 +225,7 @@ class Metalinvent:
 
         ### STEP 2 : Adding missing extraction and dissipative flows
         for i in self.df_change.index:
-            Location = self.df_change.loc[i, "Location"]
+            location = self.df_change.loc[i, "Location"]
             name = self.df_change.loc[i, "Activity"]
             refProduct = self.df_change.loc[i, "reference product"]
             analysis = self.df_change.loc[i, "Analysis"]
@@ -217,7 +236,7 @@ class Metalinvent:
                                           "code"])
             elif analysis == "Mining":
                 process_codes_list = list(self.ei_flows_with_codes[
-                                              (self.ei_flows_with_codes.loc[:, "Location"] == Location) & (
+                                              (self.ei_flows_with_codes.loc[:, "Location"] == location) & (
                                                           self.ei_flows_with_codes.loc[:, "Product"] == refProduct) & (
                                                           self.ei_flows_with_codes.loc[:, "Activity"] == name)].loc[:,
                                           "code"])
@@ -239,6 +258,11 @@ class Metalinvent:
                         "output": (self.metalinvent_db_name, code),
                         "comment": "Missing extraction flow added as per metalinvent tool"
                     })
+                    if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
+                        if self.comment_extraction not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
+                            self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_extraction
+                    else:
+                        self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_extraction
 
             qt_missing_diss = self.df_change.loc[i, "Missing dissipation"]
             if qt_missing_diss > 0:
@@ -264,10 +288,13 @@ class Metalinvent:
                         "output": (self.metalinvent_db_name, code),
                         "comment": "Missing dissipative flow added as per metalinvent tool"
                     })
+                    if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
+                        if self.comment_dissipation not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
+                            self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_dissipation
+                    else:
+                        self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_dissipation
         ### STEP 3 : Writing new metalinvent db into project
-        if self.metalinvent_db_name in list(bw.databases):
-            del bw.databases[self.metalinvent_db_name]
-        else:
-            bw.Database(self.metalinvent_db_name).write(self.ei_adj_dict)
+        self.logger.info("Writing metalinvent db to bw...")
+        bw.Database(self.metalinvent_db_name).write(self.ei_adj_dict)
 
 
