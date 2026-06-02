@@ -18,6 +18,17 @@ class Metalinvent:
         self.df_missing_flows = pd.DataFrame(
             columns=["Elem flow name", "Compartment_iw", "Sub-compartment_iw", "ACP CF value"])
 
+        # set up logging tool
+        self.logger = logging.getLogger('Metalinvent')
+        self.logger.setLevel(logging.INFO)
+        self.logger.handlers = []
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        ch = logging.StreamHandler()
+        ch.setLevel(logging.DEBUG)
+        ch.setFormatter(formatter)
+        self.logger.addHandler(ch)
+        self.logger.propagate = False
+
 
 
 
@@ -53,21 +64,30 @@ class Metalinvent:
                 columns=['Product', 'Activity', 'Location', 'code', 'unit', "ISIC sector", "CPC code"])
         )
 
+    def launch_operations(self):
+        self.logger.info("Finding missing flows...")
         self.find_missing_flows()
+        self.logger.info("Creating new biosphere...")
         self.create_new_biosphere()
+        self.logger.info("Writing new biosphere...")
         self.write_new_biosphere(self.biosphere_resources_dict)
+        self.logger.info("Building df new biosphere ...")
         self.df_new_biosphere()
+        self.logger.info("Copy ecoinvent, adjust and write in bw ...")
         self.copy_ei_db()
+        self.logger.info("Loading LCIA methods and add CFs of newly added elementary flows..")
         self.complete_LCIA_methods()
 
     def complete_LCIA_methods(self):
         impact_cat = ["Adaptation to resources services loss (beta)"]
+        iw_methods = [method for method in bw.methods if "impact world+" in " ".join(method).lower()]
         for method in impact_cat:
             method_bw = [m for m in iw_methods if "IMPACT World+ Midpoint 2.2.1 for ecoinvent v3.12" in m[0] if
                          method in m[2]]
             if len(method_bw)==0:
                 self.logger.info(method+" is missing... Add the method into project")
             else:
+                self.logger.info("Completing LCIA method with new elementary flows")
                 new_method = bw.Method(method_bw[0])
                 # register the new method
                 new_method.register()
@@ -127,13 +147,15 @@ class Metalinvent:
         for i in self.df_missing_flows.index:
             code = uuid.uuid4().hex
             self.biosphere_resources_dict[(self.new_bio_name, code)] = {
-                "name": df_missing_flows.loc[i, "Elem flow name"],
+                "name": self.df_missing_flows.loc[i, "Elem flow name"],
                 "unit": "kilogram",
                 "type": "biosphere",
-                "categories": (df_missing_flows.loc[i, "Compartment_iw"],),
+                "categories": (self.df_missing_flows.loc[i, "Compartment_iw"],),
                 "code": code
             }
     def write_new_biosphere(self,new_bio_dict):
+        if self.new_bio_name in list(bw.databases):
+            del bw.databases[self.new_bio_name]
         bw.Database(self.new_bio_name).write(new_bio_dict)
 
     def df_new_biosphere(self):
@@ -159,6 +181,8 @@ class Metalinvent:
                 self.df_new_bio_flows.loc[i, "ACP CF value"] = \
                 self.df_cf_iwp[self.df_cf_iwp.loc[:, "substances"] == self.df_new_bio_flows.loc[i, "Elem flow name"]].loc[:,
                 "ACP STEPS with C"].iloc[0]
+        self.df_new_bio_flows.drop_duplicates()
+        self.df_new_bio_flows.reset_index().drop(columns=["index"])
 
     def copy_ei_db(self):
         """
