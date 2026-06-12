@@ -5,10 +5,22 @@ import uuid
 
 class Metalinvent:
 
-    def __init__(self,bw_project,ei_db_name,new_bio_name,metalinvent_db_name,df_change,df_cf_iwp):
+    def __init__(self,bw_project,ei_db_name,method,new_bio_name,metalinvent_db_name,df_change,df_cf_iwp):
 
+        """
+
+        Args:
+            bw_project: Name of your brightway project
+            ei_db_name: Name of ecoinvent cutoff 3.12 database in your bw project
+            method: "Method_1" or "Method_2"
+            new_bio_name: User defined name of new biosphere database to store missing elementary flows in biosphere3
+            metalinvent_db_name: User defined name of adjusted version of ecoinvent cutoff 3.12
+            df_change: Excel file provided by author of this repo determining missing elementary flows in some activities
+            df_cf_iwp: Excel file with ACP and RESEDA characterization factors of dissipative (within IMPACT World+ LCIA method)
+        """
         self.bw_project = bw_project
         self.ei_db_name = ei_db_name
+        self.method = method
         self.new_bio_name = new_bio_name
         self.metalinvent_db_name = metalinvent_db_name
         self.ei_adj_dict = {}
@@ -70,18 +82,32 @@ class Metalinvent:
         )
 
     def launch_operations(self):
-        self.logger.info("Finding missing flows...")
-        self.find_missing_flows()
-        self.logger.info("Creating new biosphere...")
-        self.create_new_biosphere()
-        self.logger.info("Writing new biosphere...")
-        self.write_new_biosphere(self.biosphere_resources_dict)
-        self.logger.info("Building df new biosphere ...")
-        self.df_new_biosphere()
-        self.logger.info("Copy ecoinvent, adjust and write in bw ...")
-        self.copy_ei_db()
-        self.logger.info("Loading LCIA methods and add CFs of newly added elementary flows..")
-        self.complete_LCIA_methods()
+        if self.method == "Method_1":
+            self.logger.info("Finding missing flows...")
+            self.find_missing_flows()
+            self.logger.info("Creating new biosphere...")
+            self.create_new_biosphere()
+            self.logger.info("Writing new biosphere...")
+            self.write_new_biosphere(self.biosphere_resources_dict)
+            self.logger.info("Building df new biosphere ...")
+            self.df_new_biosphere()
+            self.logger.info("Copy ecoinvent, adjust and write in bw ...")
+            self.copy_ei_db()
+            self.logger.info("Loading LCIA methods and add CFs of newly added elementary flows..")
+            self.complete_LCIA_methods()
+        elif self.method == "Method_2":
+            self.logger.info("Finding missing flows...")
+            self.find_missing_flows()
+            self.logger.info("Creating new biosphere...")
+            self.create_new_biosphere()
+            self.logger.info("Writing new biosphere...")
+            self.write_new_biosphere(self.biosphere_resources_dict)
+            self.logger.info("Building df new biosphere ...")
+            self.df_new_biosphere()
+            self.logger.info("Copy ecoinvent, adjust and write in bw ...")
+            self.copy_ei_db()
+            self.logger.info("Loading LCIA methods and add CFs of newly added elementary flows..")
+            self.complete_LCIA_methods()
 
     def complete_LCIA_methods(self):
         iw_methods = [method for method in bw.methods if "impact world+" in " ".join(method).lower()]
@@ -256,7 +282,7 @@ class Metalinvent:
                         "amount": self.df_change.loc[i, "Missing extraction"],
                         "input": (biosphere_db, code_flow),
                         "output": (self.metalinvent_db_name, code),
-                        "comment": "Missing extraction flow added as per metalinvent tool"
+                        "comment": f"Missing extraction flow added as per {self.method} in metalinvent tool"
                     })
                     if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
                         if self.comment_extraction not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
@@ -286,7 +312,7 @@ class Metalinvent:
                         "amount": self.df_change.loc[i, "Missing dissipation"],
                         "input": (biosphere_db, code_flow),
                         "output": (self.metalinvent_db_name, code),
-                        "comment": "Missing dissipative flow added as per metalinvent tool"
+                        "comment": f"Missing dissipative flow added as per {self.method} in metalinvent tool"
                     })
                     if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
                         if self.comment_dissipation not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
