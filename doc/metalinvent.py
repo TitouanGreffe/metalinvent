@@ -21,6 +21,8 @@ class Metalinvent:
         self.bw_project = bw_project
         self.ei_db_name = ei_db_name
         self.method = method
+        if self.method not in ["Method_1","Method_2"]:
+            raise ValueError("Method must be either 'Method_1' or 'Method_2'")
         self.new_bio_name = new_bio_name
         self.metalinvent_db_name = metalinvent_db_name
         self.ei_adj_dict = {}
@@ -30,8 +32,8 @@ class Metalinvent:
         self.column_name = {"Adaptation to resources services loss (beta)":"ACP CF value",
                             "Resources services deficit (beta)":"RESEDA CF value"}
         self.impact_cat = ["Adaptation to resources services loss (beta)","Resources services deficit (beta)"]
-        self.comment_extraction = "; Metalinvent adaptations: Missing extraction flows added as per metalinvent tool."
-        self.comment_dissipation = " Missing dissipative flows added as per metalinvent tool."
+        self.comment_extraction = "; Metalinvent adaptations: Missing extraction flows added as per "+self.method+" in metalinvent tool."
+        self.comment_dissipation = " Missing dissipative flows added as per "+self.method+" in metalinvent tool."
         self.df_missing_flows = pd.DataFrame(
             columns=["Elem flow name", "Compartment_iw", "Sub-compartment_iw", "code"])
 
@@ -256,12 +258,12 @@ class Metalinvent:
             refProduct = self.df_change.loc[i, "reference product"]
             analysis = self.df_change.loc[i, "Analysis"]
             if analysis == "EOL":
-                process_codes_list = list(self.ei_flows_with_codes[
+                self.process_codes_list = list(self.ei_flows_with_codes[
                                               (self.ei_flows_with_codes.loc[:, "Product"] == refProduct) & (
                                                           self.ei_flows_with_codes.loc[:, "Activity"] == name)].loc[:,
                                           "code"])
             elif analysis == "Mining":
-                process_codes_list = list(self.ei_flows_with_codes[
+                self.process_codes_list = list(self.ei_flows_with_codes[
                                               (self.ei_flows_with_codes.loc[:, "Location"] == location) & (
                                                           self.ei_flows_with_codes.loc[:, "Product"] == refProduct) & (
                                                           self.ei_flows_with_codes.loc[:, "Activity"] == name)].loc[:,
@@ -270,7 +272,7 @@ class Metalinvent:
             qt_missing_ext = self.df_change.loc[i, "Missing extraction"]
             if qt_missing_ext > 0:
                 compartment = "natural resource"
-                for code in process_codes_list:
+                for code in self.process_codes_list:
                     code_flow = self.bio3_flows[
                                     (self.bio3_flows.loc[:, "Elem flow name"] == elem_flow_name) & (
                                                 self.bio3_flows.loc[:, "Compartment"] == compartment)].loc[:,
@@ -319,6 +321,15 @@ class Metalinvent:
                             self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_dissipation
                     else:
                         self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_dissipation
+
+        if self.method == "Method_2":
+            for code in self.process_codes_list:
+                for exc in self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges']:
+                    if "tailing" in exc["name"]:
+                        exc["amount"] = 0
+                        exc["comment"] += " Set to zero as per Method 2 of Metalinvent tool. Metal emissions from tailings are added as direct emissions in mine operation activity"
+
+
         ### STEP 3 : Writing new metalinvent db into project
         self.logger.info("Writing metalinvent db to bw...")
         bw.Database(self.metalinvent_db_name).write(self.ei_adj_dict)
