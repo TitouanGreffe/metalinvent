@@ -15,6 +15,7 @@ Two methods are proposed and differ for ore mining activities only (similar for 
 $$
   Extraction_{b} = Extraction_{h} \cdot BtH_{b,h}
 $$
+
 For byproducts, dissipation is assumed equal to extraction.
 
 
