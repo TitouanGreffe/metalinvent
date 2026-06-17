@@ -5,7 +5,7 @@ import uuid
 
 class Metalinvent:
 
-    def __init__(self,bw_project,ei_db_name,method,new_bio_name,metalinvent_db_name,df_change,df_cf_iwp):
+    def __init__(self,bw_project,ei_db_name,method,new_bio_name,metalinvent_db_name,path_file,df_cf_iwp):
 
         """
 
@@ -15,7 +15,7 @@ class Metalinvent:
             method: "Method_1" or "Method_2"
             new_bio_name: User defined name of new biosphere database to store missing elementary flows in biosphere3
             metalinvent_db_name: User defined name of adjusted version of ecoinvent cutoff 3.12
-            df_change: Excel file provided by author of this repo determining missing elementary flows in some activities
+            path_file: Path to Excel file provided by author of this repo determining missing elementary flows in some activities
             df_cf_iwp: Excel file with ACP and RESEDA characterization factors of dissipative (within IMPACT World+ LCIA method)
         """
         self.bw_project = bw_project
@@ -27,6 +27,11 @@ class Metalinvent:
         self.metalinvent_db_name = metalinvent_db_name
         self.ei_adj_dict = {}
         self.biosphere_resources_dict = {}
+        self.path_file = path_file
+        df_change = pd.read_excel(self.path_file,sheet_name="missing_amounts").fillna(0)
+        self.BtHav = pd.read_excel(self.path_file,sheet_name="BtH_av",index_col=0).fillna(0)
+        self.deposit_types = [x for x in list(set(self.BtHav.Type)) if x!=0]
+        self.elements_names = pd.read_excel(self.path_file,sheet_name="elements_names")
         self.df_change = df_change[df_change.Method == self.method]
         self.df_cf_iwp = df_cf_iwp
         self.column_name = {"Adaptation to resources services loss (beta)":"ACP CF value",
@@ -48,6 +53,10 @@ class Metalinvent:
         self.logger.addHandler(ch)
         self.logger.propagate = False
 
+        self.mineral_host = {"spodumene": {"Spodumene":{"Amount":0.0373,"Short":"Li"}},
+                             "magnesium sulfate": {"Kieserite":{"Amount":0.1746,"Short":"Mg"}}}
+        ## Li content in Spodumene from Table 1 of https://doi.org/10.3390/min9060334
+        ## Mg content in Kieserite from https://seprm.com/wp-content/uploads/2020/11/Bimpilas-G.-M.-G.N.-Anastassakis.-Magnesite-beneficiation-methods-a-review.pdf
 
 
 
@@ -84,6 +93,9 @@ class Metalinvent:
         )
 
     def launch_operations(self):
+        if self.method == "Method_2":
+            self.logger.info("Building df change compliant with Method 2...")
+            self.build_df_change_method2()
         self.logger.info("Finding missing flows...")
         self.find_missing_flows()
         self.logger.info("Creating new biosphere...")
@@ -96,6 +108,85 @@ class Metalinvent:
         self.copy_ei_db()
         self.logger.info("Loading LCIA methods and add CFs of newly added elementary flows..")
         self.complete_LCIA_methods()
+
+    def build_df_change_method2(self):
+        ei_dict = self.ei_db.load()
+        for index in self.df_change.index:
+            process_code = self.ei_flows_with_codes[(self.ei_flows_with_codes.loc[:,"Product"]==self.df_change.loc[index,"reference product"])&
+                                                    (self.ei_flows_with_codes.loc[:,"Activity"]==self.df_change.loc[index,"Activity"])&
+                                                    (self.ei_flows_with_codes.loc[:,"Location"]==self.df_change.loc[index,"Location"])].code.iloc[0]
+            if self.df_change.loc[index,"reference product"] not in self.mineral_host.keys():
+                host_short = self.df_change.loc[index, "Host"]
+                if not pd.isna(host_short) and host_short != 0:
+                    host_long = self.elements_names[self.elements_names.Short_Name==host_short].Long_Name.iloc[0]
+                    code = self.bio3_flows[(self.bio3_flows.loc[:,"Elem flow name"]==host_long)&
+                                           (self.bio3_flows.loc[:,"Compartment"]=="natural resource")&
+                                            (self.bio3_flows.loc[:, "Subcompartment"] == "in ground")].code.iloc[0]
+                    amount_host = [exc["amount"] for exc in ei_dict[(self.ei_db_name,process_code)]["exchanges"] if exc["flow"]==code][0]
+                    if len(self.BtHav.loc[host_short])>1:
+                        if self.df_change.loc[index,"reference product"] in self.deposit_types:
+                            type = self.df_change.loc[index,"reference product"]
+                        else:
+                            type = 0
+                    else:
+                        type=0
+                    depo_row = self.BtHav[(self.BtHav.index == host_short) & (self.BtHav["Type"] == type)]
+                    byproducts = [x for x in depo_row.columns[depo_row.loc[host_short] != 0].tolist() if len(x)<3]
+                    for e in byproducts:
+                        amount_byproduct = amount_host * depo_row.loc[host_short, e]
+                        new_row = (
+                            self.df_change.loc[index]
+                            .copy()
+                        )
+                        new_row.update({
+                            "Substance": e,
+                            "Host": host_long,
+                            "Substance_long_name":
+                                self.elements_names[
+                                    self.elements_names.Short_Name == e
+                                    ].Long_Name.iloc[0],
+                            "Missing extraction": amount_byproduct,
+                            "Missing dissipation": amount_byproduct,
+                            "Analysis":"Mining",
+                        })
+
+                        self.df_change.loc[len(self.df_change)] = new_row
+
+            else:
+                if self.df_change.loc[index, "reference product"] in self.deposit_types:
+                    type = self.df_change.loc[index, "reference product"]
+                else:
+                    type = 0
+                host = list(self.mineral_host[self.df_change.loc[index,"reference product"]].keys())[0]
+                host_element = self.mineral_host[self.df_change.loc[index,"reference product"]][host]["Short"]
+                depo_row = self.BtHav[(self.BtHav.index == host_element) & (self.BtHav["Type"] == type)]
+                host_long = self.elements_names[self.elements_names.Short_Name == host_element].Long_Name.iloc[0]
+                code = self.bio3_flows[(self.bio3_flows.loc[:, "Elem flow name"] == self.df_change.loc[index, "Host"]) &
+                                       (self.bio3_flows.loc[:, "Compartment"] == "natural resource")&
+                                        (self.bio3_flows.loc[:, "Subcompartment"] == "in ground")].code.iloc[0]
+                amount_host_min = [exc["amount"] for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"] if
+                               exc["flow"] == code][0]
+                byproducts = [x for x in depo_row.columns[depo_row.loc[host_element] != 0].tolist() if len(x)<3]
+                for e in byproducts:
+                    amount_host = amount_host_min*self.mineral_host[self.df_change.loc[index,"reference product"]][host]["Amount"]
+                    amount_byproduct = amount_host*depo_row.loc[host_element,e]
+                    new_row = (
+                        self.df_change.loc[index]
+                        .copy()
+                    )
+                    new_row.update({
+                        "Host": host_long,
+                        "Substance":e,
+                        "Substance_long_name":
+                            self.elements_names[
+                                self.elements_names.Short_Name == e
+                                ].Long_Name.iloc[0],
+                        "Missing extraction": amount_byproduct,
+                        "Missing dissipation": amount_byproduct,
+                        "Analysis": "Mining",
+                    })
+
+                    self.df_change.loc[len(self.df_change)] = new_row
 
     def complete_LCIA_methods(self):
         iw_methods = [method for method in bw.methods if "impact world+" in " ".join(method).lower()]
@@ -140,7 +231,7 @@ class Metalinvent:
             qt_miss_diss = self.df_change.loc[i, "Missing dissipation"]
             if qt_miss_diss > 0:
                 row_missing_flow = {"Elem flow name": self.df_change.loc[
-                                                          i, "Substance long name"] + ", dissipative flow, to the environment",
+                                                          i, "Substance_long_name"] + ", dissipative flow, to the environment",
                                     "Compartment_iw": "unspecified",
                                     "Sub-compartment_iw": "unspecified","code":uuid.uuid4().hex}
                 self.df_missing_flows = pd.concat(
@@ -254,61 +345,65 @@ class Metalinvent:
                                                           self.ei_flows_with_codes.loc[:, "Product"] == refProduct) & (
                                                           self.ei_flows_with_codes.loc[:, "Activity"] == name)].loc[:,
                                           "code"])
-            elem_flow_name = self.df_change.loc[i, "Substance long name"]
+            elem_flow_name = self.df_change.loc[i, "Substance_long_name"]
             qt_missing_ext = self.df_change.loc[i, "Missing extraction"]
             if qt_missing_ext > 0:
                 compartment = "natural resource"
                 for code in self.process_codes_list:
-                    code_flow = self.bio3_flows[
+                    code_flow_list = self.bio3_flows[
                                     (self.bio3_flows.loc[:, "Elem flow name"] == elem_flow_name) & (
                                                 self.bio3_flows.loc[:, "Compartment"] == compartment)].loc[:,
-                                "code"].iloc[0]
-                    biosphere_db = "biosphere3"
-                    self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges'].append({
-                        "flow": code_flow,
-                        "type": "biosphere",
-                        "name":elem_flow_name,
-                        "amount": self.df_change.loc[i, "Missing extraction"],
-                        "input": (biosphere_db, code_flow),
-                        "output": (self.metalinvent_db_name, code),
-                        "comment": f"Missing extraction flow added as per {self.method} in metalinvent tool"
-                    })
-                    if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
-                        if self.comment_extraction not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
-                            self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_extraction
-                    else:
-                        self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_extraction
+                                "code"]
+                    if len(code_flow_list)==1:
+                        code_flow = code_flow_list.iloc[0]
+                        biosphere_db = "biosphere3"
+                        self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges'].append({
+                            "flow": code_flow,
+                            "type": "biosphere",
+                            "name":elem_flow_name,
+                            "amount": self.df_change.loc[i, "Missing extraction"],
+                            "input": (biosphere_db, code_flow),
+                            "output": (self.metalinvent_db_name, code),
+                            "comment": f"Missing extraction flow added as per {self.method} in metalinvent tool"
+                        })
+                        if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
+                            if self.comment_extraction not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
+                                self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_extraction
+                        else:
+                            self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_extraction
 
             qt_missing_diss = self.df_change.loc[i, "Missing dissipation"]
             if qt_missing_diss > 0:
                 compartment = "unspecified"
-                elem_flow_name = self.df_change.loc[i, "Substance long name"] + ", dissipative flow, to the environment"
+                elem_flow_name = self.df_change.loc[i, "Substance_long_name"] + ", dissipative flow, to the environment"
                 for code in self.process_codes_list:
                     if elem_flow_name in list(self.df_new_bio_flows.loc[:, "Elem flow name"]):
                         biosphere_db = self.new_bio_name
-                        code_flow = \
-                        self.df_new_bio_flows[self.df_new_bio_flows.loc[:, "Elem flow name"] == elem_flow_name].loc[:, "code"].iloc[0]
-                        print("code_flow = ", code_flow)
+                        code_flow_list = \
+                        self.df_new_bio_flows[self.df_new_bio_flows.loc[:, "Elem flow name"] == elem_flow_name].loc[:, "code"]
+                        print("code_flow = ", code_flow_list)
                     else:
                         biosphere_db = "biosphere3"
-                        code_flow = self.bio3_flows[
+                        code_flow_list = self.bio3_flows[
                                         (self.bio3_flows.loc[:, "Elem flow name"] == elem_flow_name) & (
                                                     self.bio3_flows.loc[:, "Compartment"] == compartment)].loc[:,
-                                    "code"].iloc[0]
-                    self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges'].append({
-                        "flow": code_flow,
-                        "type": "biosphere",
-                        "name": elem_flow_name,
-                        "amount": self.df_change.loc[i, "Missing dissipation"],
-                        "input": (biosphere_db, code_flow),
-                        "output": (self.metalinvent_db_name, code),
-                        "comment": f"Missing dissipative flow added as per {self.method} in metalinvent tool"
-                    })
-                    if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
-                        if self.comment_dissipation not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
-                            self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_dissipation
-                    else:
-                        self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_dissipation
+                                    "code"]
+                    if len(code_flow_list) == 1:
+                        code_flow = code_flow_list.iloc[0]
+                        self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges'].append({
+                            "flow": code_flow,
+                            "type": "biosphere",
+                            "name": elem_flow_name,
+                            "amount": self.df_change.loc[i, "Missing dissipation"],
+                            "input": (biosphere_db, code_flow),
+                            "output": (self.metalinvent_db_name, code),
+                            "comment": f"Missing dissipative flow added as per {self.method} in metalinvent tool"
+                        })
+                        if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
+                            if self.comment_dissipation not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
+                                self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_dissipation
+                        else:
+                            self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_dissipation
 
         if self.method == "Method_2":
             for code in self.process_codes_list:
