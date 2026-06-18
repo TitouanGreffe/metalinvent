@@ -111,7 +111,9 @@ class Metalinvent:
 
     def build_df_change_method2(self):
         ei_dict = self.ei_db.load()
-        for index in self.df_change.index:
+        df_change_mining = self.df_change[self.df_change.Analysis=="Mining"]
+
+        for index in df_change_mining.index:
             process_code = self.ei_flows_with_codes[(self.ei_flows_with_codes.loc[:,"Product"]==self.df_change.loc[index,"reference product"])&
                                                     (self.ei_flows_with_codes.loc[:,"Activity"]==self.df_change.loc[index,"Activity"])&
                                                     (self.ei_flows_with_codes.loc[:,"Location"]==self.df_change.loc[index,"Location"])].code.iloc[0]
@@ -345,6 +347,12 @@ class Metalinvent:
                                                           self.ei_flows_with_codes.loc[:, "Product"] == refProduct) & (
                                                           self.ei_flows_with_codes.loc[:, "Activity"] == name)].loc[:,
                                           "code"])
+            if self.method == "Method_2":
+                for code in self.process_codes_list:
+                    for exc in self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges']:
+                        if "tailing" in exc["name"]:
+                            exc["amount"] = 0
+                            exc["comment"] += " Set to zero as per Method 2 of Metalinvent tool. Metal emissions from tailings are added as direct emissions in mine operation activity"
             elem_flow_name = self.df_change.loc[i, "Substance_long_name"]
             qt_missing_ext = self.df_change.loc[i, "Missing extraction"]
             if qt_missing_ext > 0:
@@ -405,12 +413,6 @@ class Metalinvent:
                         else:
                             self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_dissipation
 
-        if self.method == "Method_2":
-            for code in self.process_codes_list:
-                for exc in self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges']:
-                    if "tailing" in exc["name"]:
-                        exc["amount"] = 0
-                        exc["comment"] += " Set to zero as per Method 2 of Metalinvent tool. Metal emissions from tailings are added as direct emissions in mine operation activity"
 
 
         ### STEP 3 : Writing new metalinvent db into project
