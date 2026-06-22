@@ -30,7 +30,7 @@ class Metalinvent:
         self.path_file = path_file
         df_change = pd.read_excel(self.path_file,sheet_name="missing_amounts").fillna(0)
         self.BtHav = pd.read_excel(self.path_file,sheet_name="BtH_av",index_col=0).fillna(0)
-        self.deposit_types = [x for x in list(set(self.BtHav.Type)) if x!=0]
+        self.deposit_types = [x for x in list(set(self.BtHav.Deposit)) if x!=0]
         self.elements_names = pd.read_excel(self.path_file,sheet_name="elements_names")
         self.df_change = df_change[df_change.Method == self.method]
         self.df_cf_iwp = df_cf_iwp
