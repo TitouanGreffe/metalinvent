@@ -127,12 +127,12 @@ class Metalinvent:
                     amount_host = [exc["amount"] for exc in ei_dict[(self.ei_db_name,process_code)]["exchanges"] if exc["flow"]==code][0]
                     if len(self.BtHav.loc[host_short])>1:
                         if self.df_change.loc[index,"reference product"] in self.deposit_types:
-                            type = self.df_change.loc[index,"reference product"]
+                            deposit = self.df_change.loc[index,"reference product"]
                         else:
-                            type = 0
+                            deposit = 0
                     else:
-                        type=0
-                    depo_row = self.BtHav[(self.BtHav.index == host_short) & (self.BtHav["Type"] == type)]
+                        deposit=0
+                    depo_row = self.BtHav[(self.BtHav.index == host_short) & (self.BtHav["Deposit"] == deposit)]
                     byproducts = [x for x in depo_row.columns[depo_row.loc[host_short] != 0].tolist() if len(x)<3]
                     for e in byproducts:
                         amount_byproduct = amount_host * depo_row.loc[host_short, e]
@@ -156,12 +156,12 @@ class Metalinvent:
 
             else:
                 if self.df_change.loc[index, "reference product"] in self.deposit_types:
-                    type = self.df_change.loc[index, "reference product"]
+                    deposit = self.df_change.loc[index, "reference product"]
                 else:
-                    type = 0
+                    deposit = 0
                 host = list(self.mineral_host[self.df_change.loc[index,"reference product"]].keys())[0]
                 host_element = self.mineral_host[self.df_change.loc[index,"reference product"]][host]["Short"]
-                depo_row = self.BtHav[(self.BtHav.index == host_element) & (self.BtHav["Type"] == type)]
+                depo_row = self.BtHav[(self.BtHav.index == host_element) & (self.BtHav["Deposit"] == deposit)]
                 host_long = self.elements_names[self.elements_names.Short_Name == host_element].Long_Name.iloc[0]
                 code = self.bio3_flows[(self.bio3_flows.loc[:, "Elem flow name"] == self.df_change.loc[index, "Host"]) &
                                        (self.bio3_flows.loc[:, "Compartment"] == "natural resource")&
@@ -206,22 +206,10 @@ class Metalinvent:
                 new_method.metadata["unit"] = bw.Method(method_bw[0]).metadata["unit"]
                 dict_method = bw.Method(method_bw[0]).load()
                 for i in self.df_new_bio_flows.index:
-                    print(((self.new_bio_name, self.df_new_bio_flows[(self.df_new_bio_flows.loc[:, "Elem flow name"] ==
-                                                                     self.df_new_bio_flows.loc[i, "Elem flow name"]) & (
-                                                                                self.df_new_bio_flows.loc[:, "Compartment"] ==
-                                                                                self.df_new_bio_flows.loc[i, "Compartment"])].loc[
-                                                     :, "code"].iloc[0]), self.df_new_bio_flows.loc[i, self.column_name[method]]))
+                    print(((self.new_bio_name, self.df_new_bio_flows.loc[i, "code"]), self.df_new_bio_flows.loc[i, self.column_name[method]]))
                     try:
                         if self.df_new_bio_flows.loc[i, self.column_name[method]] !=0:
-                            dict_method.append(((self.new_bio_name, self.df_new_bio_flows[(self.df_new_bio_flows.loc[:,
-                                                                                          "Elem flow name"] ==
-                                                                                          self.df_new_bio_flows.loc[
-                                                                                              i, "Elem flow name"]) & (
-                                                                                                     self.df_new_bio_flows.loc[:,
-                                                                                                     "Compartment"] ==
-                                                                                                     self.df_new_bio_flows.loc[
-                                                                                                         i, "Compartment"])].loc[
-                                                                          :, "code"].iloc[0]),
+                            dict_method.append(((self.new_bio_name, self.df_new_bio_flows.loc[i, "code"]),
                                                 self.df_new_bio_flows.loc[i, self.column_name[method]]))
                     except IndexError:
                         pass
