@@ -92,6 +92,17 @@ class Metalinvent:
                 columns=['Product', 'Activity', 'Location', 'code', 'unit', "ISIC sector", "CPC code"])
         )
 
+        self.subcomp_lookup = (
+            self.bio3_flows.set_index("code")["Subcompartment"]
+            .to_dict()
+        )
+
+        self.market_price_lookup = (
+            self.elements_names
+            .set_index("Long_Name")["market_price"]
+            .to_dict()
+        )
+
     def launch_operations(self):
         if self.method == "Method_2":
             self.logger.info("Building df change compliant with Method 2...")
@@ -109,6 +120,36 @@ class Metalinvent:
         self.logger.info("Loading LCIA methods and add CFs of newly added elementary flows..")
         self.complete_LCIA_methods()
 
+    def determine_host(self,process_code,ei_dict):
+        print(process_code)
+        nat_resource_codes = [
+            exc["flow"]
+            for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"]
+            if self.subcomp_lookup.get(exc["flow"]) == "in ground"
+        ]
+        nat_resource_codes = list(set(nat_resource_codes))
+        pass_nat_res = list(self.bio3_flows[self.bio3_flows.loc[:,"Elem flow name"].isin(list(self.elements_names.Long_Name))].code)
+        nat_resource_codes = [x for x in nat_resource_codes if x in pass_nat_res]
+        contributions = [
+            (
+                exc["name"],
+                exc["amount"] * self.market_price_lookup.get(exc["name"], 0)
+            )
+            for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"]
+            if exc["flow"] in nat_resource_codes
+        ]
+        if not contributions:
+            return 0, 0
+
+        total_contrib = sum(contrib for _, contrib in contributions)
+
+        max_name, max_contrib = max(contributions, key=lambda x: x[1])
+        host_short = self.elements_names[self.elements_names.Long_Name == max_name].Short_Name.iloc[0]
+        share = max_contrib / total_contrib
+        return host_short,share
+
+
+
     def build_df_change_method2(self):
         ei_dict = self.ei_db.load()
         df_change_mining = self.df_change[self.df_change.Analysis=="Mining"]
@@ -118,7 +159,7 @@ class Metalinvent:
                                                     (self.ei_flows_with_codes.loc[:,"Activity"]==self.df_change.loc[index,"Activity"])&
                                                     (self.ei_flows_with_codes.loc[:,"Location"]==self.df_change.loc[index,"Location"])].code.iloc[0]
             if self.df_change.loc[index,"reference product"] not in self.mineral_host.keys():
-                host_short = self.df_change.loc[index, "Host"]
+                host_short = self.determine_host(process_code,ei_dict)[0]
                 if not pd.isna(host_short) and host_short != 0:
                     host_long = self.elements_names[self.elements_names.Short_Name==host_short].Long_Name.iloc[0]
                     code = self.bio3_flows[(self.bio3_flows.loc[:,"Elem flow name"]==host_long)&
