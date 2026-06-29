@@ -175,11 +175,27 @@ class Metalinvent:
                     depo_row = self.BtHav[(self.BtHav.index == host_short) & (self.BtHav["Deposit"] == deposit)]
                     byproducts = [x for x in depo_row.columns[depo_row.loc[host_short] != 0].tolist() if len(x)<3]
                     for e in byproducts:
+                        code_ext_byproduct = self.bio3_flows[(self.bio3_flows.loc[:, "Elem flow name"] ==self.elements_names[self.elements_names.Short_Name == e].Long_Name.iloc[0]) &
+                                                            (self.bio3_flows.loc[:,
+                                                             "Compartment"] == "natural resource") &
+                                                            (self.bio3_flows.loc[:,
+                                                             "Subcompartment"] == "in ground")].code.iloc[0]
+                        reported_amounts = [exc["amount"] for exc in
+                                            ei_dict[(self.ei_db_name, process_code)]["exchanges"] if
+                                            exc["flow"] == code_ext_byproduct]
+                        if len(reported_amounts) > 1:
+                            amount_byproduct_reported = sum(reported_amounts)
+                        else:
+                            amount_byproduct_reported = 0
                         amount_byproduct = amount_host * depo_row.loc[host_short, e]
                         new_row = (
                             self.df_change.loc[index]
                             .copy()
                         )
+                        if amount_byproduct - amount_byproduct_reported > 0:
+                            missing_extraction = amount_byproduct - amount_byproduct_reported
+                        else:
+                            missing_extraction = 0
                         new_row.update({
                             "Substance": e,
                             "Host": host_long,
@@ -187,7 +203,7 @@ class Metalinvent:
                                 self.elements_names[
                                     self.elements_names.Short_Name == e
                                     ].Long_Name.iloc[0],
-                            "Missing extraction": amount_byproduct,
+                            "Missing extraction": missing_extraction,
                             "Missing dissipation": amount_byproduct,
                             "Analysis":"Mining",
                         })
@@ -225,6 +241,10 @@ class Metalinvent:
                         self.df_change.loc[index]
                         .copy()
                     )
+                    if amount_byproduct-amount_byproduct_reported>0:
+                        missing_extraction = amount_byproduct-amount_byproduct_reported
+                    else:
+                        missing_extraction = 0
                     new_row.update({
                         "Host": host_long,
                         "Substance":e,
@@ -232,7 +252,7 @@ class Metalinvent:
                             self.elements_names[
                                 self.elements_names.Short_Name == e
                                 ].Long_Name.iloc[0],
-                        "Missing extraction": amount_byproduct-amount_byproduct_reported,
+                        "Missing extraction": missing_extraction,
                         "Missing dissipation": amount_byproduct,
                         "Analysis": "Mining",
                     })
