@@ -121,7 +121,6 @@ class Metalinvent:
         self.complete_LCIA_methods()
 
     def determine_host(self,process_code,ei_dict):
-        print(process_code)
         nat_resource_codes = [
             exc["flow"]
             for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"]
@@ -211,6 +210,15 @@ class Metalinvent:
                                exc["flow"] == code][0]
                 byproducts = [x for x in depo_row.columns[depo_row.loc[host_element] != 0].tolist() if len(x)<3]
                 for e in byproducts:
+                    code_ext_byproduct = self.bio3_flows[(self.bio3_flows.loc[:, "Elem flow name"] == self.elements_names[self.elements_names.Short_Name == e].Long_Name.iloc[0]) &
+                                       (self.bio3_flows.loc[:, "Compartment"] == "natural resource")&
+                                        (self.bio3_flows.loc[:, "Subcompartment"] == "in ground")].code.iloc[0]
+                    reported_amounts = [exc["amount"] for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"] if
+                               exc["flow"] == code_ext_byproduct]
+                    if len(reported_amounts)>1:
+                        amount_byproduct_reported = sum(reported_amounts)
+                    else:
+                        amount_byproduct_reported = 0
                     amount_host = amount_host_min*self.mineral_host[self.df_change.loc[index,"reference product"]][host]["Amount"]
                     amount_byproduct = amount_host*depo_row.loc[host_element,e]
                     new_row = (
@@ -224,7 +232,7 @@ class Metalinvent:
                             self.elements_names[
                                 self.elements_names.Short_Name == e
                                 ].Long_Name.iloc[0],
-                        "Missing extraction": amount_byproduct,
+                        "Missing extraction": amount_byproduct-amount_byproduct_reported,
                         "Missing dissipation": amount_byproduct,
                         "Analysis": "Mining",
                     })
