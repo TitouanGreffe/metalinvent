@@ -42,6 +42,7 @@ class Metalinvent:
         self.df_missing_flows = pd.DataFrame(
             columns=["Elem flow name", "Compartment_iw", "Sub-compartment_iw", "code"])
 
+        self.list_codes_modif = []
         # set up logging tool
         self.logger = logging.getLogger('Metalinvent')
         self.logger.setLevel(logging.INFO)
@@ -174,6 +175,7 @@ class Metalinvent:
                         deposit=0
                     depo_row = self.BtHav[(self.BtHav.index == host_short) & (self.BtHav["Deposit"] == deposit)]
                     byproducts = [x for x in depo_row.columns[depo_row.loc[host_short] != 0].tolist() if len(x)<3]
+                    byproducts = [x for x in byproducts if x not in ["Lu"]] ## no Luthethium extraction flow in ecoinvent
                     for e in byproducts:
                         code_ext_byproduct = self.bio3_flows[(self.bio3_flows.loc[:, "Elem flow name"] ==self.elements_names[self.elements_names.Short_Name == e].Long_Name.iloc[0]) &
                                                             (self.bio3_flows.loc[:,
@@ -422,6 +424,7 @@ class Metalinvent:
                     if len(code_flow_list)==1:
                         code_flow = code_flow_list.iloc[0]
                         biosphere_db = "biosphere3"
+                        self.list_codes_modif.append(code)
                         self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges'].append({
                             "flow": code_flow,
                             "type": "biosphere",
@@ -455,6 +458,7 @@ class Metalinvent:
                                     "code"]
                     if len(code_flow_list) == 1:
                         code_flow = code_flow_list.iloc[0]
+                        self.list_codes_modif.append(code)
                         self.ei_adj_dict[(self.metalinvent_db_name, code)]['exchanges'].append({
                             "flow": code_flow,
                             "type": "biosphere",
