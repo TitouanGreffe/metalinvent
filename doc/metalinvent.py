@@ -182,13 +182,9 @@ class Metalinvent:
                                                              "Compartment"] == "natural resource") &
                                                             (self.bio3_flows.loc[:,
                                                              "Subcompartment"] == "in ground")].code.iloc[0]
-                        reported_amounts = [exc["amount"] for exc in
+                        amount_byproduct_reported = sum([exc["amount"] for exc in
                                             ei_dict[(self.ei_db_name, process_code)]["exchanges"] if
-                                            exc["flow"] == code_ext_byproduct]
-                        if len(reported_amounts) > 1:
-                            amount_byproduct_reported = sum(reported_amounts)
-                        else:
-                            amount_byproduct_reported = 0
+                                            exc["flow"] == code_ext_byproduct])
                         amount_byproduct = amount_host * depo_row.loc[host_short, e]
                         new_row = (
                             self.df_change.loc[index]
@@ -210,7 +206,7 @@ class Metalinvent:
                             "Analysis":"Mining",
                         })
 
-                        self.df_change.loc[len(self.df_change)] = new_row
+                        self.df_change.loc[self.df_change.index.max() + 1] = new_row
 
             else:
                 if self.df_change.loc[index, "reference product"] in self.deposit_types:
@@ -259,7 +255,7 @@ class Metalinvent:
                         "Analysis": "Mining",
                     })
 
-                    self.df_change.loc[len(self.df_change)] = new_row
+                    self.df_change.loc[self.df_change.index.max() + 1] = new_row
 
     def complete_LCIA_methods(self):
         iw_methods = [method for method in bw.methods if "impact world+" in " ".join(method).lower()]
@@ -437,8 +433,8 @@ class Metalinvent:
                         if 'comment' in list(self.ei_adj_dict[(self.metalinvent_db_name, code)].keys()):
                             if self.comment_extraction not in self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment']:
                                 self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] += self.comment_extraction
-                        else:
-                            self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_extraction
+                            else:
+                                self.ei_adj_dict[(self.metalinvent_db_name, code)]['comment'] = self.comment_extraction
 
             qt_missing_diss = self.df_change.loc[i, "Missing dissipation"]
             if qt_missing_diss > 0:
