@@ -33,6 +33,7 @@ class Metalinvent:
         self.deposit_types = [x for x in list(set(self.BtHav.Deposit)) if x!=0]
         self.elements_names = pd.read_excel(self.path_file,sheet_name="elements_names")
         self.df_change = df_change[df_change.Method == self.method]
+        self.special_activities = {"iron ore mine operation, 46% Fe":"Fe","iron ore mine operation, 63% Fe":"Fe"}
         self.df_cf_iwp = df_cf_iwp
         self.column_name = {"Adaptation to resources services loss (beta)":"ACP CF value",
                             "Resources services deficit (beta)":"RESEDA CF value"}
@@ -160,12 +161,39 @@ class Metalinvent:
                                                     (self.ei_flows_with_codes.loc[:,"Location"]==self.df_change.loc[index,"Location"])].code.iloc[0]
             if self.df_change.loc[index,"reference product"] not in self.mineral_host.keys():
                 host_short = self.determine_host(process_code,ei_dict)[0]
+                host_long = self.elements_names[self.elements_names.Short_Name == host_short].Long_Name.iloc[0]
+                code = self.bio3_flows[(self.bio3_flows.loc[:, "Elem flow name"] == host_long) &
+                                       (self.bio3_flows.loc[:, "Compartment"] == "natural resource") &
+                                       (self.bio3_flows.loc[:, "Subcompartment"] == "in ground")].code.iloc[0]
+                amount_host = \
+                [exc["amount"] for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"] if exc["flow"] == code][
+                    0]
+                ### Add missing extraction for host for ecoinvent activities omitting losses at mining
+                if df_change_mining.loc[index,"Activity"] in self.special_activities.keys() and df_change_mining.loc[index,"Host"] in self.special_activities.values():
+
+                    missing_extraction = amount_host*(1/0.71-1) ## 71% recovery rate for Fe in mines from Nassar et al. (2022)
+                    amount_host = amount_host/0.71
+                    new_row_host = (
+                        self.df_change.loc[index]
+                        .copy()
+                    )
+                    new_row_host.update({
+                        "Substance": host_short,
+                        "Host": host_long,
+                        "Substance_long_name":
+                            self.elements_names[
+                                self.elements_names.Short_Name == host_short
+                                ].Long_Name.iloc[0],
+                        "Missing extraction": missing_extraction,
+                        "Missing dissipation": missing_extraction,
+                        "Analysis": "Mining",
+                    })
+
+                    self.df_change.loc[self.df_change.index.max() + 1] = new_row_host
+
+
+                ### Add missing extraction and dissipation of byproducts
                 if not pd.isna(host_short) and host_short != 0:
-                    host_long = self.elements_names[self.elements_names.Short_Name==host_short].Long_Name.iloc[0]
-                    code = self.bio3_flows[(self.bio3_flows.loc[:,"Elem flow name"]==host_long)&
-                                           (self.bio3_flows.loc[:,"Compartment"]=="natural resource")&
-                                            (self.bio3_flows.loc[:, "Subcompartment"] == "in ground")].code.iloc[0]
-                    amount_host = [exc["amount"] for exc in ei_dict[(self.ei_db_name,process_code)]["exchanges"] if exc["flow"]==code][0]
                     if len(self.BtHav.loc[host_short])>1:
                         if self.df_change.loc[index,"reference product"] in self.deposit_types:
                             deposit = self.df_change.loc[index,"reference product"]
