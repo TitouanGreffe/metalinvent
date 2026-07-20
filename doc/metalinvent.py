@@ -23,8 +23,9 @@ class Metalinvent:
         self.method = method
         if self.method not in ["Method_1","Method_2"]:
             raise ValueError("Method must be either 'Method_1' or 'Method_2'")
+        self.method_short = {"Method_1":"_m1","Method_2":"_m2"}
         self.new_bio_name = new_bio_name
-        self.metalinvent_db_name = metalinvent_db_name
+        self.metalinvent_db_name = metalinvent_db_name+self.method_short[self.method]
         self.ei_adj_dict = {}
         self.biosphere_resources_dict = {}
         self.path_file = path_file
