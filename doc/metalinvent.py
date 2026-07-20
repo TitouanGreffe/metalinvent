@@ -29,7 +29,7 @@ class Metalinvent:
         self.ei_adj_dict = {}
         self.biosphere_resources_dict = {}
         self.path_file = path_file
-        df_change = pd.read_excel(self.path_file,sheet_name="missing_amounts").fillna(0)
+        df_change = pd.read_excel(self.path_file,sheet_name="Changes").fillna(0)
         self.BtHav = pd.read_excel(self.path_file,sheet_name="BtH_av",index_col=0).fillna(0)
         self.deposit_types = [x for x in list(set(self.BtHav.Deposit)) if x!=0]
         self.elements_names = pd.read_excel(self.path_file,sheet_name="elements_names")
