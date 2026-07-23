@@ -300,16 +300,17 @@ class Metalinvent:
                 new_method.register()
                 # set its unit
                 new_method.metadata["unit"] = bw.Method(method_bw[0]).metadata["unit"]
-                dict_method = bw.Method(method_bw[0]).load()
+                dict_method_all = bw.Method(method_bw[0]).load()
+                dict_method_bio3 = [i for i in dict_method_all if i[0][0] == "biosphere3"]
                 for i in self.df_new_bio_flows.index:
                     print(((self.new_bio_name, self.df_new_bio_flows.loc[i, "code"]), self.df_new_bio_flows.loc[i, self.column_name[method]]))
                     try:
                         if self.df_new_bio_flows.loc[i, self.column_name[method]] !=0:
-                            dict_method.append(((self.new_bio_name, self.df_new_bio_flows.loc[i, "code"]),
+                            dict_method_bio3.append(((self.new_bio_name, self.df_new_bio_flows.loc[i, "code"]),
                                                 self.df_new_bio_flows.loc[i, self.column_name[method]]))
                     except IndexError:
                         pass
-                new_method.write(dict_method)
+                new_method.write(dict_method_bio3)
 
     def find_missing_flows(self):
         count_miss_flow = 0
