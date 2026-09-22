@@ -150,6 +150,30 @@ class Metalinvent:
         share = max_contrib / total_contrib
         return host_short,share
 
+    def determine_revenues_share(self,process_code,ei_dict):
+        nat_resource_codes = [
+            exc["flow"]
+            for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"]
+            if self.subcomp_lookup.get(exc["flow"]) == "in ground"
+        ]
+        nat_resource_codes = list(set(nat_resource_codes))
+        pass_nat_res = list(self.bio3_flows[self.bio3_flows.loc[:,"Elem flow name"].isin(list(self.elements_names.Long_Name))].code)
+        nat_resource_codes = [x for x in nat_resource_codes if x in pass_nat_res]
+        revenues = [
+            (
+                exc["name"],
+                exc["amount"] * self.market_price_lookup.get(exc["name"], 0)
+            )
+            for exc in ei_dict[(self.ei_db_name, process_code)]["exchanges"]
+            if exc["flow"] in nat_resource_codes
+        ]
+        if not revenues:
+            return [(0, 0)]
+
+        total_revenues = sum(revenue for _, revenue in revenues)
+        contributions = [(name,revenue/total_revenues) for name,revenue in revenues]
+        return contributions
+
 
 
     def build_df_change_method2(self):
